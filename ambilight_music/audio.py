@@ -58,7 +58,7 @@ class Band:
     decay_s: float         # how long the pulse takes to fade
 
 
-KICK = Band("kick", 35, 150, sensitivity=1.4, min_flux=0.12, refractory_s=0.24, decay_s=0.24)
+KICK = Band("kick", 35, 150, sensitivity=1.4, min_flux=0.12, refractory_s=0.24, decay_s=0.32)
 SNARE = Band("snare", 300, 3000, sensitivity=1.8, min_flux=0.10, refractory_s=0.18, decay_s=0.14)
 HATS = Band("hats", 5000, 14000, sensitivity=1.0, min_flux=0.05, refractory_s=0.0, decay_s=0.0)
 
@@ -78,6 +78,13 @@ MAX_PERIOD_S = 1.5         # ~40 BPM
 MATCH_WINDOW = 0.25        # a kick within this share of a period of the expected one confirms it
 PHASE_CORRECTION = 0.5     # how far a confirming kick pulls the phase towards itself
 MAX_MISSES = 2             # predicted pulses without a real kick before the clock gives up
+
+# Pulse shape. An instant jump to full brightness reads as a flash; a short ramp still lands
+# on the beat but looks like a swell. Weak kicks give small pulses, only strong ones reach 1.
+ATTACK_S = 0.06
+MIN_PULSE = 0.35           # a kick just over the threshold
+FULL_PULSE_RATIO = 2.5     # a kick this far over the threshold gives a full pulse
+TYPICAL_SMOOTHING = 0.3    # predicted pulses use the recent typical kick strength
 
 
 class _BandTracker:
@@ -133,17 +140,29 @@ class BeatClock:
         self.misses = 0
         self.fired_at = -math.inf
         self._fired_for: float | None = None  # expected beat time the last early pulse was for
+        self._amplitude = 0.0      # peak of the current pulse
+        self._start = 0.0          # pulse value when it fired, so overlapping pulses never dip
+        self._typical = 0.7        # recent typical kick strength, for predicted pulses
 
     @property
     def locked(self) -> bool:
         return self.period is not None
 
     def pulse(self, now: float) -> float:
-        if now < self.fired_at:
+        dt = now - self.fired_at
+        if dt < 0:
             return 0.0
-        return math.exp(-(now - self.fired_at) / self.decay_s)
+        if dt < ATTACK_S:
+            x = dt / ATTACK_S
+            x = x * x * (3 - 2 * x)  # smoothstep
+            return self._start + (self._amplitude - self._start) * x
+        return self._amplitude * math.exp(-(dt - ATTACK_S) / self.decay_s)
 
-    def onset(self, t: float) -> bool:
+    def onset(self, t: float, strength: float = FULL_PULSE_RATIO) -> bool:
+        """`strength` is the onset's flux relative to its threshold (>= 1)."""
+        amplitude = min(1.0, max(MIN_PULSE, MIN_PULSE + (1 - MIN_PULSE) * (strength - 1) / (FULL_PULSE_RATIO - 1)))
+        self._typical += (amplitude - self._typical) * TYPICAL_SMOOTHING
+        self._next_amplitude = amplitude
         self.onsets.append(t)
         if self.locked:
             expected = self._nearest_expected(t)
@@ -173,6 +192,7 @@ class BeatClock:
                 self.onsets.clear()
             return False
         if now >= expected - self.lead_s and self._fired_for != expected and self.misses < MAX_MISSES:
+            self._next_amplitude = self._typical
             return self._fire(now, expected)
         return False
 
@@ -182,6 +202,8 @@ class BeatClock:
         self.misses = 0
 
     def _fire(self, now: float, expected: float | None) -> bool:
+        self._start = self.pulse(now)
+        self._amplitude = max(self._start, getattr(self, "_next_amplitude", 1.0))
         self.fired_at = now
         self._fired_for = expected
         return True
@@ -246,9 +268,9 @@ class AudioAnalyzer:
             return self.state
 
         power = np.abs(np.fft.rfft(mono * self._window)) ** 2
-        kick, _ = self.kick.feed(power, now)
+        kick, kick_ratio = self.kick.feed(power, now)
         if kick:
-            self.clock.onset(now)
+            self.clock.onset(now, kick_ratio)
         self.snare.feed(power, now)
         _, hats_ratio = self.hats.feed(power, now)
 

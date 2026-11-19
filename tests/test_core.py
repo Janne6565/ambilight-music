@@ -62,9 +62,9 @@ def test_analyzer_detects_kicks_and_stays_quiet_in_silence():
     now = 0.0
     for i in range(200):  # ~4.3 s, a kick every 24 blocks (~0.5 s, 120 BPM)
         block = hum + (kick if i % 24 == 0 else 0)
-        before = a.state.beat
-        state = a.feed(block, now)
-        if state.beat > 0.99 and before < 0.99:
+        before = a.clock.fired_at
+        a.feed(block, now)
+        if a.clock.fired_at != before:
             beats += 1
         now += BLOCK_FRAMES / 48000
     assert 6 <= beats <= 9
@@ -107,3 +107,26 @@ def test_full_intensity_does_not_pin_brightness():
     assert 0.59 <= brightness(AudioState(level=0.0, beat=0.0), 2.0) and brightness(AudioState(level=1.0, beat=0.0), 2.0) <= 0.71
     assert brightness(AudioState(level=1.0, beat=0.6), 2.0) > 0.99   # snappier above 1
     assert brightness(AudioState(level=0.5, beat=0.0), 0.0) == brightness(AudioState(level=0.5, beat=1.0), 0.0)
+
+
+def test_pulse_ramps_up_and_scales_with_kick_strength():
+    from ambilight_music.audio import ATTACK_S, MIN_PULSE, BeatClock
+
+    weak, strong = BeatClock(), BeatClock()
+    weak.onset(1.0, strength=1.05)
+    strong.onset(1.0, strength=3.0)
+    assert weak.pulse(1.0) == 0.0                      # no instant jump
+    assert 0 < strong.pulse(1.0 + ATTACK_S / 2) < 1.0  # still rising
+    assert abs(strong.pulse(1.0 + ATTACK_S) - 1.0) < 1e-6  # strong kick: full pulse
+    assert abs(weak.pulse(1.0 + ATTACK_S) - MIN_PULSE) < 0.05  # weak kick: small pulse
+
+
+def test_overlapping_pulse_never_dips():
+    from ambilight_music.audio import ATTACK_S, BeatClock
+
+    c = BeatClock()
+    c.onset(1.0, strength=3.0)
+    level = c.pulse(1.1)
+    c.onset(1.1, strength=1.2)  # a second, weaker kick while the first still glows
+    assert c.pulse(1.1) >= level - 1e-9
+    assert c.pulse(1.1 + ATTACK_S / 2) >= level - 1e-9
