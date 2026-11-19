@@ -79,3 +79,31 @@ def test_analyzer_detects_kicks_and_stays_quiet_in_silence():
 def test_origin_fits_hyperhdr_schema():
     assert 4 <= len(ORIGIN) <= MAX_ORIGIN_LENGTH
     HyperHdr("127.0.0.1", 19444, 100, ORIGIN)  # constructor validates too
+
+
+def test_compressed_music_still_pulses():
+    """Loudness pinned at the ceiling the whole time (modern mastering): kicks must still show."""
+    from ambilight_music.renderer import brightness
+
+    rng = np.random.default_rng(1)
+    a = AudioAnalyzer()
+    t = np.arange(BLOCK_FRAMES) / 48000
+    kick = 0.5 * np.sin(2 * np.pi * 55 * t) * np.exp(-t / 0.01)
+    lights, kicks, now = [], 0, 0.0
+    for i in range(400):  # ~8.5 s at ~120 BPM
+        bed = 0.25 * rng.standard_normal(BLOCK_FRAMES)  # dense, loud, always there
+        before = a.kick.last_onset
+        state = a.feed(bed + (kick if i % 23 == 0 else 0), now)
+        kicks += a.kick.last_onset != before
+        lights.append(brightness(state, 1.0))
+        now += BLOCK_FRAMES / 48000
+    assert 14 <= kicks <= 19
+    assert min(lights[100:]) < 0.6 and max(lights[100:]) > 0.95
+
+
+def test_full_intensity_does_not_pin_brightness():
+    from ambilight_music.renderer import brightness
+
+    assert brightness(AudioState(level=1.0, beat=0.0), 2.0) < 0.6
+    assert brightness(AudioState(level=1.0, beat=0.6), 2.0) > 0.99   # snappier above 1
+    assert brightness(AudioState(level=0.5, beat=0.0), 0.0) == brightness(AudioState(level=0.5, beat=1.0), 0.0)
