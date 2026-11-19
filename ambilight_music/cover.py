@@ -101,6 +101,11 @@ class CoverFollower:
             if self._last_url == url:
                 self._last_url = None  # let the next message for the same cover try again
             return
+        if self._last_url != url:
+            # A newer cover was chosen while this one downloaded (a slow internet fetch can
+            # finish after a fast local one): applying it now would show the previous song.
+            log.info("Dropping stale palette for %s", url)
+            return
         log.info("New palette %s for %s", palette.describe(), url)
         self.on_palette(palette, url)
 

@@ -30,3 +30,30 @@ def test_other_messages_are_ignored():
     assert f._handle(_msg("volume", "61")) is False
     assert f._handle("not json") is False
     assert f.choose() is None
+
+
+def test_slow_download_of_an_older_cover_does_not_win(monkeypatch):
+    import threading
+
+    from PIL import Image
+
+    from ambilight_music import cover as cover_mod
+
+    applied = []
+    f = CoverFollower("ws://example.invalid/audio", lambda p, u: applied.append(u))
+    release_slow = threading.Event()
+
+    def fake_download(url):
+        if "slow" in url:
+            release_slow.wait(5)
+        return Image.new("RGB", (40, 40), (200, 30, 40) if "slow" in url else (30, 60, 200))
+
+    monkeypatch.setattr(cover_mod, "download", fake_download)
+    f._last_url = "https://cdn.example/slow-previous-song.jpg"
+    slow = threading.Thread(target=f._load, args=("https://cdn.example/slow-previous-song.jpg",))
+    slow.start()
+    f._last_url = "http://amp.example/current.jpg"
+    f._load("http://amp.example/current.jpg")
+    release_slow.set()
+    slow.join(5)
+    assert applied == ["http://amp.example/current.jpg"]
