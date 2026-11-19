@@ -130,3 +130,10 @@ def test_overlapping_pulse_never_dips():
     c.onset(1.1, strength=1.2)  # a second, weaker kick while the first still glows
     assert c.pulse(1.1) >= level - 1e-9
     assert c.pulse(1.1 + ATTACK_S / 2) >= level - 1e-9
+
+
+def test_black_and_white_cover_stays_neutral():
+    img = Image.new("RGB", (100, 100), (20, 20, 20))
+    ImageDraw.Draw(img).rectangle([20, 20, 80, 80], fill=(150, 150, 150))
+    (r, g, b), = palette.extract(img).colors
+    assert abs(r - g) < 0.01 and abs(g - b) < 0.01

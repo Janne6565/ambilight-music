@@ -73,7 +73,12 @@ def extract(image: Image.Image) -> Palette:
     return Palette(colors=colors, weights=weights / weights.sum())
 
 
+NEUTRAL_SATURATION = 0.20  # below this the offset fades out, so grey stays grey
+
+
 def _boost(h: float, s: float, v: float) -> tuple[float, float, float]:
-    s = min(1.0, s * SATURATION_GAIN + SATURATION_OFFSET)
+    # A grey has no real hue (colorsys reports 0 = red), so a flat saturation offset tinted
+    # black-and-white covers pink. Fade the offset in with the color that is actually there.
+    s = min(1.0, s * SATURATION_GAIN + SATURATION_OFFSET * min(1.0, s / NEUTRAL_SATURATION))
     v = max(MIN_OUTPUT_BRIGHTNESS, min(1.0, v * BRIGHTNESS_GAIN))
     return colorsys.hsv_to_rgb(h, s, v)
