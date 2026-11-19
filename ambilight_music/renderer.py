@@ -35,8 +35,8 @@ BASE_WIDTH = 0.06
 WEIGHT_WIDTH = 0.22         # dominant colors get wider blobs
 SNARE_WIDTH = 0.06          # extra width for secondary colors on a snare (x intensity)
 
-PULSE_DEPTH = 0.45          # how far below full brightness the light sits between kicks at intensity 1
-LEVEL_DEPTH = 0.15          # extra dimming in quiet passages
+PULSE_DEPTH = 0.30          # between kicks the light sits at 70 % (loud) down to 60 % (quiet) at intensity 1
+LEVEL_DEPTH = 0.10          # extra dimming in quiet passages
 STATIC_BRIGHTNESS = 0.9     # intensity 0
 SHIMMER_DEPTH = 0.05
 SHIMMER_SPATIAL = 23.0      # ripples around the ring

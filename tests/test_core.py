@@ -98,12 +98,12 @@ def test_compressed_music_still_pulses():
         lights.append(brightness(state, 1.0))
         now += BLOCK_FRAMES / 48000
     assert 14 <= kicks <= 19
-    assert min(lights[100:]) < 0.6 and max(lights[100:]) > 0.95
+    assert min(lights[100:]) < 0.75 and max(lights[100:]) > 0.95
 
 
 def test_full_intensity_does_not_pin_brightness():
     from ambilight_music.renderer import brightness
 
-    assert brightness(AudioState(level=1.0, beat=0.0), 2.0) < 0.6
+    assert 0.59 <= brightness(AudioState(level=0.0, beat=0.0), 2.0) and brightness(AudioState(level=1.0, beat=0.0), 2.0) <= 0.71
     assert brightness(AudioState(level=1.0, beat=0.6), 2.0) > 0.99   # snappier above 1
     assert brightness(AudioState(level=0.5, beat=0.0), 0.0) == brightness(AudioState(level=0.5, beat=1.0), 0.0)
