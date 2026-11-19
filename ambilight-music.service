@@ -1,0 +1,15 @@
+# systemd *user* unit: ~/.config/systemd/user/ambilight-music.service
+# Needs lingering (`loginctl enable-linger <user>`) to start at boot without a login.
+[Unit]
+Description=Album cover colors moving with the music, rendered into HyperHDR
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/ambilight-music
+EnvironmentFile=%h/.config/ambilight-music.env
+ExecStart=%h/ambilight-music/.venv/bin/python -m ambilight_music.main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
