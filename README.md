@@ -53,7 +53,7 @@ All routes take GET or POST and need the token, as `?token=...` or `Authorizatio
 | `/on` | start music mode | `1` |
 | `/off` | stop, clear the HyperHDR priority | `0` |
 | `/status` | | `1` or `0` |
-| `/intensity?value=0..2` | how strongly it reacts (1 = default) | the new value |
+| `/intensity?value=0..2` | how strongly it reacts to the music: 0 = colors only drift, 1 = default, 2 = maximum; without `value` it only reads | the current value |
 
 State (on/off, intensity) is kept across restarts.
 

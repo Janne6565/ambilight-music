@@ -168,10 +168,13 @@ def make_handler(mode: MusicMode, token: str):
             elif url.path == "/off":
                 mode.set_enabled(False)
             elif url.path == "/intensity":
-                try:
-                    mode.set_intensity(float(query.get("value", [""])[0]))
-                except ValueError:
-                    return self._reply(400, "value must be a number")
+                # 0 = colors only drift, no reaction to the music; 1 = default; 2 = maximum.
+                # Without ?value= it just reports the current setting.
+                if "value" in query:
+                    try:
+                        mode.set_intensity(float(query["value"][0]))
+                    except ValueError:
+                        return self._reply(400, "value must be a number")
                 return self._reply(200, f"{mode.renderer.intensity:g}")
             elif url.path != "/status":
                 return self._reply(404, "not found")
