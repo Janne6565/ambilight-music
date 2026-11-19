@@ -30,8 +30,9 @@ cover websocket ── albumCover URL ──────────────
 * **Safety**: every frame expires after 1 s, so if the process dies the grabber is back
   immediately. Off clears the priority.
 
-The cover source is any websocket that sends
-`{"type": "albumCover", "value": "<image url>"}` messages and replays the last one on connect.
+The cover source is any websocket that sends `{"type": "<key>", "value": "<image url>"}`
+messages and replays the last ones on connect. `localAlbumCover` (the artwork the playing device
+actually sent) wins over `albumCover` (a search-based guess), which is only the fallback.
 
 ## Install (Debian/Raspberry Pi OS, as a user service)
 
