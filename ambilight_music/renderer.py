@@ -29,16 +29,16 @@ FRAME_WIDTH = 64
 FRAME_HEIGHT = 36
 
 BASE_SPEED = 1 / 150.0      # turns per second without music
-KICK_PUSH = 0.30            # extra turns per second at a full kick pulse (x intensity)
+KICK_PUSH = 0.12            # extra turns per second at a full kick pulse (x intensity)
 DRIFT_AMPLITUDE = 0.07      # how far each blob wanders from its home, in turns
 BASE_WIDTH = 0.06
 WEIGHT_WIDTH = 0.22         # dominant colors get wider blobs
-SNARE_WIDTH = 0.12          # extra width for secondary colors on a snare (x intensity)
+SNARE_WIDTH = 0.06          # extra width for secondary colors on a snare (x intensity)
 
-PULSE_DEPTH = 0.55          # how far below full brightness the light sits between kicks at intensity 1
+PULSE_DEPTH = 0.45          # how far below full brightness the light sits between kicks at intensity 1
 LEVEL_DEPTH = 0.15          # extra dimming in quiet passages
 STATIC_BRIGHTNESS = 0.9     # intensity 0
-SHIMMER_DEPTH = 0.12
+SHIMMER_DEPTH = 0.05
 SHIMMER_SPATIAL = 23.0      # ripples around the ring
 
 CROSSFADE_S = 1.5

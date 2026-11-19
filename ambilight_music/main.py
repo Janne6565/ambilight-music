@@ -1,8 +1,8 @@
 """ambilight-music: album cover colors that move with the music, rendered into HyperHDR.
 
 Configuration comes from environment variables (see config.example.env). Home Assistant (or
-anything else) switches it with `/on`, `/off`, `/status` and `/intensity?value=0..2` on the
-control port. The on/off state survives restarts.
+anything else) switches it with `/on`, `/off`, `/status`, `/intensity?value=0..2` and
+`/lead?value=<ms>` on the control port. All of that survives restarts.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import palette as palette_mod
-from .audio import AudioCapture
+from .audio import DEFAULT_LEAD_S, MAX_LEAD_S, AudioCapture
 from .cover import CoverFollower
 from .hyperhdr import HyperHdr
 from .renderer import Renderer
@@ -45,7 +45,8 @@ class Config:
         self.priority = int(env.get("HYPERHDR_PRIORITY", "100"))
         self.control_host = env.get("CONTROL_HOST", "0.0.0.0")
         self.control_port = int(env.get("CONTROL_PORT", "8096"))
-        self.fps = float(env.get("FPS", "50"))
+        self.fps = float(env.get("FPS", "60"))
+        self.lead_ms = float(env.get("LEAD_MS", str(DEFAULT_LEAD_S * 1000)))
         self.intensity = float(env.get("INTENSITY", "1.0"))
         self.state_file = Path(env.get("STATE_FILE", str(Path.home() / ".local/state/ambilight-music/state.json")))
 
@@ -56,7 +57,8 @@ class MusicMode:
         self.renderer = Renderer(intensity=config.intensity)
         self.renderer.set_palette(palette_mod.FALLBACK, time.monotonic())
         self.hyper = HyperHdr(config.hyperhdr_host, config.hyperhdr_port, config.priority, ORIGIN)
-        self.audio = AudioCapture(config.audio_device)
+        self._kick = threading.Event()
+        self.audio = AudioCapture(config.audio_device, lead_s=config.lead_ms / 1000, on_kick=self._kick.set)
         self.covers = CoverFollower(config.hub_ws_url, self._on_palette)
         self._enabled = threading.Event()
         self._stop = threading.Event()
@@ -70,6 +72,8 @@ class MusicMode:
         except (OSError, ValueError):
             return
         self.renderer.intensity = float(state.get("intensity", self.renderer.intensity))
+        if "lead_ms" in state:
+            self.audio.set_lead(float(state["lead_ms"]) / 1000)
         if state.get("enabled"):
             self.set_enabled(True, persist=False)
 
@@ -77,7 +81,8 @@ class MusicMode:
         try:
             self.config.state_file.parent.mkdir(parents=True, exist_ok=True)
             self.config.state_file.write_text(json.dumps(
-                {"enabled": self._enabled.is_set(), "intensity": self.renderer.intensity}))
+                {"enabled": self._enabled.is_set(), "intensity": self.renderer.intensity,
+                 "lead_ms": round(self.audio.lead_s * 1000)}))
         except OSError as e:
             log.warning("Could not save state: %s", e)
 
@@ -106,6 +111,11 @@ class MusicMode:
         self.renderer.intensity = max(0.0, min(2.0, value))
         self._save_state()
 
+    def set_lead_ms(self, value: float) -> None:
+        """How far ahead of a predicted kick the pulse fires, to cancel the delay of the light chain."""
+        self.audio.set_lead(max(0.0, min(MAX_LEAD_S, value / 1000)))
+        self._save_state()
+
     def _on_palette(self, palette: palette_mod.Palette, _url: str) -> None:
         with self._palette_lock:
             self.renderer.set_palette(palette, time.monotonic())
@@ -132,7 +142,10 @@ class MusicMode:
                     log.warning("%s", e)
                 failing = True
                 time.sleep(2)
-            time.sleep(max(0.0, interval - (time.monotonic() - started)))
+            # Sleep until the next frame, but wake up at once when a kick fires: a pulse that
+            # waits for the next tick is up to a whole frame late.
+            self._kick.wait(timeout=max(0.0, interval - (time.monotonic() - started)))
+            self._kick.clear()
 
     def shutdown(self) -> None:
         self._stop.set()
@@ -176,6 +189,14 @@ def make_handler(mode: MusicMode, token: str):
                     except ValueError:
                         return self._reply(400, "value must be a number")
                 return self._reply(200, f"{mode.renderer.intensity:g}")
+            elif url.path == "/lead":
+                # Milliseconds a predicted kick pulse fires early. Without ?value= it only reads.
+                if "value" in query:
+                    try:
+                        mode.set_lead_ms(float(query["value"][0]))
+                    except ValueError:
+                        return self._reply(400, "value must be a number")
+                return self._reply(200, f"{round(mode.audio.lead_s * 1000)}")
             elif url.path != "/status":
                 return self._reply(404, "not found")
             self._reply(200, "1" if mode.enabled else "0")

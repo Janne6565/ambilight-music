@@ -53,3 +53,13 @@ def test_wrong_token_is_rejected(api):
     call, mode, _ = api
     assert call("/intensity?value=0", token="nope")[0] == 401
     assert mode.renderer.intensity == 1.0
+
+
+def test_lead_setting(api):
+    call, mode, config = api
+    assert call("/lead") == (200, "100")
+    assert call("/lead?value=150") == (200, "150")
+    assert call("/lead?value=9999") == (200, "400")   # clamped
+    restarted = MusicMode(config)
+    restarted.load_state()
+    assert round(restarted.audio.lead_s * 1000) == 400
