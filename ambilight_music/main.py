@@ -203,11 +203,17 @@ def make_handler(mode: MusicMode, token: str):
 
         def _reply(self, status: int, body: str) -> None:
             data = body.encode()
-            self.send_response(status)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError):
+                # The caller hung up first, e.g. a Home Assistant automation in `mode: restart`
+                # cancelling the previous request while a slider is dragged. The action itself
+                # already happened, so there is nobody left to tell.
+                pass
 
         def log_message(self, fmt: str, *args) -> None:  # keep tokens out of the journal
             log.debug("%s %s", self.command, urlparse(self.path).path)
