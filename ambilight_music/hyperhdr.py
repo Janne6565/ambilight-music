@@ -23,6 +23,8 @@ MAX_ORIGIN_LENGTH = 20
 
 
 class HyperHdr:
+    SEND_TIMEOUT_S = 3.0
+
     def __init__(self, host: str, port: int, priority: int, origin: str):
         if not 4 <= len(origin) <= MAX_ORIGIN_LENGTH:
             raise ValueError(f"HyperHDR origin must be 4..{MAX_ORIGIN_LENGTH} characters, got {origin!r}")
@@ -64,8 +66,8 @@ class HyperHdr:
                         raise ConnectionError(f"HyperHDR {self.host}:{self.port} unreachable: {e}") from e
 
     def _connect(self) -> None:
-        sock = socket.create_connection((self.host, self.port), timeout=3)
-        sock.settimeout(3)
+        sock = socket.create_connection((self.host, self.port), timeout=self.SEND_TIMEOUT_S)
+        sock.settimeout(self.SEND_TIMEOUT_S)
         self._sock = sock
         threading.Thread(target=self._drain, args=(sock,), name="hyperhdr-reader", daemon=True).start()
         log.info("Connected to HyperHDR at %s:%d", self.host, self.port)
@@ -79,15 +81,26 @@ class HyperHdr:
             self._sock = None
 
     def _drain(self, sock: socket.socket) -> None:
-        sock_file = sock.makefile("r", encoding="utf-8", errors="replace")
-        try:
-            sock.settimeout(None)
-            for line in sock_file:
+        # Never touch the socket's timeout here: it is shared with the sender. This used to call
+        # settimeout(None), which made sendall() block forever as soon as HyperHDR stopped
+        # reading, while holding the lock every /on and /off needs, so the whole control API
+        # hung with its port still open. Read with the same 3 s timeout and just keep waiting.
+        buffer = b""
+        while True:
+            try:
+                chunk = sock.recv(65536)
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            if not chunk:
+                return
+            buffer += chunk
+            *lines, buffer = buffer.split(b"\n")
+            for line in lines:
                 try:
                     reply = json.loads(line)
                 except ValueError:
                     continue
                 if reply.get("success") is False:
                     log.warning("HyperHDR rejected %s: %s", reply.get("command"), reply.get("error"))
-        except OSError:
-            pass
