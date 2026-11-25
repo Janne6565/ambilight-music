@@ -137,3 +137,21 @@ def test_black_and_white_cover_stays_neutral():
     ImageDraw.Draw(img).rectangle([20, 20, 80, 80], fill=(150, 150, 150))
     (r, g, b), = palette.extract(img).colors
     assert abs(r - g) < 0.01 and abs(g - b) < 0.01
+
+
+def test_small_vivid_accent_survives_a_dark_cover():
+    """A red tree covering ~3 % of a dark blue cover used to be averaged away by k-means."""
+    img = Image.new("RGB", (200, 200), (10, 20, 45))
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 120, 199, 199], fill=(40, 90, 150))
+    d.rectangle([90, 40, 110, 70], fill=(210, 20, 40))   # 1.6 % of the pixels
+    d.rectangle([60, 80, 140, 84], fill=(200, 15, 35))   # +1 %
+    p = palette.extract(img)
+    reds = [c for c in p.colors if c[0] > 0.4 and c[0] > 2 * c[2]]
+    assert len(reds) == 1
+    assert p.weights[[i for i, c in enumerate(p.colors) if c[0] > 0.4 and c[0] > 2 * c[2]][0]] >= 0.1
+
+
+def test_no_accent_invented_when_there_is_none():
+    p = palette.extract(_cover())  # red + blue, both already main colors
+    assert len(p.colors) == 2
